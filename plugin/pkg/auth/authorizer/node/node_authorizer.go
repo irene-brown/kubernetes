@@ -191,11 +191,24 @@ func (r *NodeAuthorizer) authorizeGet(nodeName string, startingType vertexType, 
 	return r.authorize(nodeName, startingType, attrs)
 }
 
+// authorizeGet authorizes "get" requests to objects of the specified type if they are related to the specified node
+func (r *NodeAuthorizer) authorizePost(nodeName string, startingType vertexType, attrs authorizer.Attributes) (authorizer.Decision, string, error) {
+	if attrs.GetVerb() != "post" {
+		klog.V(2).Infof("NODE DENY: '%s' %#v", nodeName, attrs)
+		return authorizer.DecisionNoOpinion, "can only get individual resources of this type", nil
+	}
+	if len(attrs.GetSubresource()) > 0 {
+		klog.V(2).Infof("NODE DENY: '%s' %#v", nodeName, attrs)
+		return authorizer.DecisionNoOpinion, "cannot get subresource", nil
+	}
+	return r.authorize(nodeName, startingType, attrs)
+}
+
 // authorizeReadNamespacedObject authorizes "get", "list" and "watch" requests to single objects of a
 // specified types if they are related to the specified node.
 func (r *NodeAuthorizer) authorizeReadNamespacedObject(nodeName string, startingType vertexType, attrs authorizer.Attributes) (authorizer.Decision, string, error) {
 	switch attrs.GetVerb() {
-	case "get", "list", "watch":
+	case "get", "post", "list", "watch":
 		//ok
 	default:
 		klog.V(2).Infof("NODE DENY: '%s' %#v", nodeName, attrs)
@@ -261,7 +274,7 @@ func (r *NodeAuthorizer) authorizeLease(nodeName string, attrs authorizer.Attrib
 	// allowed verbs: get, create, update, patch, delete
 	verb := attrs.GetVerb()
 	switch verb {
-	case "get", "create", "update", "patch", "delete":
+	case "get", "post", "create", "update", "patch", "delete":
 		//ok
 	default:
 		klog.V(2).Infof("NODE DENY: '%s' %#v", nodeName, attrs)
@@ -290,7 +303,7 @@ func (r *NodeAuthorizer) authorizeCSINode(nodeName string, attrs authorizer.Attr
 	// allowed verbs: get, create, update, patch, delete
 	verb := attrs.GetVerb()
 	switch verb {
-	case "get", "create", "update", "patch", "delete":
+	case "get", "post", "create", "update", "patch", "delete":
 		//ok
 	default:
 		klog.V(2).Infof("NODE DENY: '%s' %#v", nodeName, attrs)
@@ -329,7 +342,7 @@ func (r *NodeAuthorizer) authorizeResourceSlice(nodeName string, attrs authorize
 		// For create, the noderestriction admission plugin is performing this check.
 		// Here we don't have access to the content of the new object.
 		return authorizer.DecisionAllow, "", nil
-	case "get", "update", "patch", "delete":
+	case "get", "post", "update", "patch", "delete":
 		// Checking the existing object must have established that access
 		// is allowed by recording a graph edge.
 		return r.authorize(nodeName, sliceVertexType, attrs)
@@ -367,7 +380,7 @@ func (r *NodeAuthorizer) authorizeNode(nodeName string, attrs authorizer.Attribu
 		case "create", "update", "patch":
 			// Use the NodeRestriction admission plugin to limit a node to creating/updating its own API object.
 			return authorizer.DecisionAllow, "", nil
-		case "get", "list", "watch":
+		case "get", "post", "list", "watch":
 			// Compare the name directly, rather than using the graph,
 			// so kubelets can attempt a read of their Node API object prior to creation.
 			switch attrs.GetName() {
